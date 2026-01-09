@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vārdu spēle</title>
+    <style>
+        * { box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            margin: 0; 
+            min-height: 100vh; 
+            justify-content: center; 
+            padding: 20px; 
+            color: #2d3436;
+            
+            /* FONA ATTĒLA IESTATĪJUMI */
+            background-image: url('background.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
+
+        .container { 
+            background: rgba(255, 255, 255, 0.95); /* Baltā krāsa ar 95% caurredzamību */
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+            text-align: center; 
+            position: relative; 
+            width: fit-content;
+            backdrop-filter: blur(5px); /* Papildus izpludinājums fonam zem lodziņa */
+        }
+
+        .header-row { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 8px; }
+        h1 { font-weight: 600; margin: 0; font-size: 1.5rem; letter-spacing: -0.5px; }
+        #timer-box { background: #f1f2f6; padding: 4px 12px; border-radius: 8px; font-weight: 600; font-size: 1.1rem; color: #0984e3; min-width: 60px; }
+        #timer-box.low-time { color: #d63031; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        
+        #sound-toggle { 
+            position: absolute; top: 25px; right: 25px; 
+            background: none; border: none; font-size: 1.2rem; 
+            cursor: pointer; opacity: 0.6; transition: 0.2s;
+        }
+
+        .hint { color: #636e72; font-size: 0.9rem; margin-bottom: 20px; }
+        
+        #grid { 
+            display: grid; 
+            grid-template-columns: repeat(7, 50px); 
+            grid-template-rows: repeat(7, 50px); 
+            gap: 8px; 
+            background-color: #f1f2f6; 
+            padding: 12px; 
+            border-radius: 12px;
+        }
+        
+        .cell { 
+            width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; font-size: 1.3rem; font-weight: 500; border-radius: 8px; 
+            background: #fff; border: 1px solid #dfe6e9; transition: all 0.2s ease; user-select: none;
+        }
+        .cell.selected { background-color: #fff9db; border-color: #fab005; color: #f08c00; }
+        .cell.found { background-color: #ebfbee !important; color: #2f9e44; border-color: #b2f2bb; }
+        
+        #results { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.98); border-radius: 12px;
+            display: none; flex-direction: column; align-items: center; 
+            justify-content: center; z-index: 10; padding: 20px;
+        }
+        
+        #controls { margin-top: 25px; display: flex; gap: 12px; justify-content: center; }
+        
+        .action-btn { 
+            width: 220px; 
+            padding: 14px 0; 
+            font-size: 1rem; 
+            cursor: pointer; 
+            border: none; 
+            border-radius: 10px; 
+            font-weight: 600; 
+            transition: 0.2s; 
+            margin: 5px 0;
+            display: block;
+        }
+        
+        .btn-finish { background: #0984e3; color: white; }
+        .btn-finish:hover { background: #0873c4; transform: translateY(-1px); }
+        .btn-outline { background: #f1f2f6; color: #2d3436; }
+        
+        .confetti { position: absolute; width: 8px; height: 8px; top: -10px; z-index: 1; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(100vh) rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <button id="sound-toggle" onclick="toggleSound()">🔊</button>
+    <div class="header-row">
+        <h1>Vārdu spēle</h1>
+        <div id="timer-box">200</div>
+    </div>
+    <p class="hint">Atrodi visus vārdus un spied "Gatavs"!</p>
+    
+    <div class="grid-wrapper" style="position: relative;">
+        <div id="grid"></div>
+        <div id="results">
+            <h2 id="congrats-msg"></h2>
+            <div id="score-details" style="font-size: 1.1rem; margin-bottom: 10px;"></div>
+            <div id="found-list" style="margin-bottom: 10px; color: #2f9e44; font-weight: 500;"></div>
+            <div id="summary-msg" style="font-size: 0.85rem; color: #d63031; margin-bottom: 25px;"></div>
+            <button class="action-btn btn-finish" onclick="location.reload()">SĀKT NO JAUNA</button>
+            <button class="action-btn btn-outline" onclick="hideResults()">APSKATĪT LAUKUMU</button>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button class="action-btn btn-finish" id="finish-btn" onclick="finishGame()">Gatavs</button>
+    </div>
+</div>
+
+<script>
+    const allPossibleWords = ["MAMMA", "TĒTIS", "KAĶIS", "SUNS", "PUTNS", "MĀJA", "KOKS", "PUĶE", "LĀCIS", "PIENS", "ĀBOLS", "SULA", "RĪTS", "SAULE", "ZĀLE", "POGA", "LELLE", "BUMBA", "AUTO", "SKOLA", "ZARS", "MIEGS", "LIETUS", "SNIEGS", "VĒJŠ", "ZEME", "JŪRA", "ZIVS", "VILKS", "ZAĶIS", "EZIS", "BITE", "KĀJA", "ROKA", "MUTE", "ACIS", "ZILS", "ZAĻŠ", "SARKANS"];
+    let wordsInGame = [], foundWords = [], selectedCells = [], timeLeft = 200, timerInterval = null, isTimerStarted = false, isSoundOn = true, audioCtx = null;
+    const gridSize = 7;
+    let gridArray = Array(gridSize).fill().map(() => Array(gridSize).fill(''));
+
+    function playTone(freq, duration) {
+        if (!isSoundOn) return;
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        } catch(e) {}
+    }
+
+    function toggleSound() {
+        isSoundOn = !isSoundOn;
+        document.getElementById('sound-toggle').textContent = isSoundOn ? "🔊" : "🔇";
+    }
+
+    function initGame() {
+        const shuffled = [...allPossibleWords].sort(() => Math.random() - 0.5);
+        const targetCount = Math.floor(Math.random() * 5) + 3;
+        let placedCount = 0;
+
+        for (let word of shuffled) {
+            if (placedCount >= targetCount) break;
+            let placed = false, attempts = 0;
+            while (!placed && attempts < 600) {
+                const isHorizontal = Math.random() > 0.5;
+                const row = Math.floor(Math.random() * (isHorizontal ? gridSize : gridSize - word.length));
+                const col = Math.floor(Math.random() * (isHorizontal ? gridSize - word.length : gridSize));
+                let canPlace = true, hasOverlap = false;
+
+                for (let i = 0; i < word.length; i++) {
+                    const r = isHorizontal ? row : row + i;
+                    const c = isHorizontal ? col + i : col;
+                    if (gridArray[r][c] !== '') {
+                        if (gridArray[r][c] === word[i].toUpperCase()) hasOverlap = true;
+                        else { canPlace = false; break; }
+                    }
+                }
+                if (canPlace && (hasOverlap || attempts > 400)) {
+                    for (let i = 0; i < word.length; i++) {
+                        const r = isHorizontal ? row : row + i;
+                        const c = isHorizontal ? col + i : col;
+                        gridArray[r][c] = word[i].toUpperCase();
+                    }
+                    wordsInGame.push(word.toUpperCase());
+                    placed = true;
+                    placedCount++;
+                }
+                attempts++;
+            }
+        }
+
+        const alphabet = "AĀBCČDEĒFGĢHIĪJKĶLĻMNŅOPRSŠTUŪVZŽ";
+        const gridElement = document.getElementById('grid');
+        gridElement.innerHTML = '';
+
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < gridSize; c++) {
+                if (gridArray[r][c] === '') gridArray[r][c] = alphabet[Math.floor(Math.random() * alphabet.length)];
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.textContent = gridArray[r][c];
+                cell.onclick = () => {
+                    if (!isTimerStarted) {
+                        isTimerStarted = true;
+                        timerInterval = setInterval(() => {
+                            timeLeft--;
+                            document.getElementById('timer-box').textContent = timeLeft;
+                            if (timeLeft <= 20) document.getElementById('timer-box').classList.add('low-time');
+                            if (timeLeft <= 0) finishGame();
+                        }, 1000);
+                    }
+                    playTone(523.25, 0.05);
+                    cell.classList.toggle('selected');
+                    if (cell.classList.contains('selected')) selectedCells.push(cell);
+                    else selectedCells = selectedCells.filter(i => i !== cell);
+                    checkWordLive();
+                };
+                gridElement.appendChild(cell);
+            }
+        }
+    }
+
+    function checkWordLive() {
+        if (selectedCells.length < 2) return;
+        for (let word of wordsInGame) {
+            if (foundWords.includes(word)) continue;
+            const currentSelectionChars = selectedCells.map(c => c.textContent).sort().join('');
+            const sortedWord = word.split('').sort().join('');
+            if (currentSelectionChars === sortedWord) {
+                foundWords.push(word);
+                playTone(783.99, 0.2);
+                selectedCells.forEach(c => {
+                    c.classList.remove('selected');
+                    c.classList.add('found');
+                });
+                selectedCells = [];
+                break;
+            }
+        }
+    }
+
+    function hideResults() {
+        document.getElementById('results').style.display = 'none';
+        document.getElementById('finish-btn').style.display = 'block';
+        document.getElementById('finish-btn').textContent = "ATPAKAĻ UZ REZULTĀTU";
+    }
+
+    function finishGame() {
+        clearInterval(timerInterval);
+        document.getElementById('results').style.display = 'flex';
+        document.getElementById('finish-btn').style.display = 'none';
+        const allFound = foundWords.length === wordsInGame.length;
+        document.getElementById('congrats-msg').textContent = allFound ? "Izcili!" : "Rezultāts";
+        document.getElementById('score-details').innerHTML = `Atradi <strong>${foundWords.length}</strong> no <strong>${wordsInGame.length}</strong>`;
+        document.getElementById('found-list').innerHTML = foundWords.length > 0 ? "Vārdi: " + foundWords.join(", ") : "";
+        const missed = wordsInGame.filter(w => !foundWords.includes(w));
+        document.getElementById('summary-msg').textContent = missed.length > 0 ? "Palika: " + missed.join(", ") : "Atradi visu!";
+        if (allFound) createConfetti();
+    }
+
+    function createConfetti() {
+        const colors = ['#0984e3', '#00b894', '#fdcb6e', '#e17055', '#6c5ce7'];
+        for (let i = 0; i < 60; i++) {
+            const confetti = document.createElement('div');
+            confetti.className = 'confetti';
+            confetti.style.left = Math.random() * 100 + 'vw';
+            confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+            document.body.appendChild(confetti);
+            setTimeout(() => confetti.remove(), 4000);
+        }
+    }
+
+    initGame();
+</script>
+</body>
+</html>
